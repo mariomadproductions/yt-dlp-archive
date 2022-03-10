@@ -3,11 +3,35 @@ import subprocess
 import argparse
 import datetime
 import json
-import tempfile
 from pathlib import Path
+import unicodedata
+import re
 
-def mk_video_dir(base_dir):
-    return tempfile.mkdtemp(dir=base_dir)
+#from https://github.com/django/django/blob/
+#67b5f506a600a54658405cf821c14ada4080e61f/django/utils/text.py#L400
+def slugify(value, allow_unicode=False):
+    """
+    Convert to ASCII if 'allow_unicode' is False. Convert spaces or repeated
+    dashes to single dashes. Remove characters that aren't alphanumerics,
+    underscores, or hyphens. Convert to lowercase. Also strip leading and
+    trailing whitespace, dashes, and underscores.
+    """
+    value = str(value)
+    if allow_unicode:
+        value = unicodedata.normalize("NFKC", value)
+    else:
+        value = (
+            unicodedata.normalize("NFKD", value)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+    value = re.sub(r"[^\w\s-]", "", value.lower())
+    return re.sub(r"[-\s]+", "-", value).strip("-_")
+
+def mk_video_dir(base_dir,url):
+    video_dir = base_dir.joinpath(slugify(url,allow_unicode=False))
+    video_dir.mkdir()
+    return video_dir
 
 def get_json_name_noext(video_dir):
     SUFFIX = '.info.json'
@@ -15,8 +39,11 @@ def get_json_name_noext(video_dir):
         return path.name[:-len(SUFFIX)]
 
 def ren_video_dir(video_dir):
-    new_name = get_json_name_noext(video_dir)
-
+    new_name = Path(get_json_name_noext(video_dir))
+    if new_name.exists():
+        raise ValueError('New directory name already exists')
+    else:
+        video_dir.rename(new_name)
 
 def get_date():
     #from https://stackoverflow.com/a/28147286/2352336
@@ -69,7 +96,7 @@ def main():
     YT_DLP_VER = get_yt_dlp_ver()
     URL = args.url
 
-    video_dir = mk_video_dir('.')
+    video_dir = mk_video_dir(Path('.'),URL)
     dl_vid(YT_DLP_OPTIONS,URL,video_dir)
     write_info_file(DATE,YT_DLP_VER,YT_DLP_OPTIONS,
                     video_dir)
